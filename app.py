@@ -435,15 +435,20 @@ elif page == "🗺️  Route & Distance Analysis":
                      color='Trips', color_continuous_scale='Purples',
                      text='Trips', height=600,
                      labels={'Route':'','Trips':'Trips'})
-        fig.update_traces(texttemplate='%{text:,}', textposition='outside',
-                          textfont_color='white')
-        fig.update_layout(
+        fig.update_traces(
+    texttemplate='%{text:,}',
+    textposition='outside',
+    textfont_color='white'
+)
+
+fig.update_layout(
     **PLOT_LAYOUT,
     xaxis={**AXIS_STYLE, "tickfont": dict(size=10, color='white')},
-    yaxis={**AXIS_STYLE, "tickfont": dict(size=10, color='white')}
+    yaxis={**AXIS_STYLE, "tickfont": dict(size=10, color='white')},
+    coloraxis_showscale=False
 )
-                          coloraxis_showscale=False)
-        st.plotly_chart(fig, use_container_width=True)
+
+st.plotly_chart(fig, use_container_width=True)
 
     with col_r:
         st.markdown("<div class='section-header'>📏 Distance Distribution</div>", unsafe_allow_html=True)
