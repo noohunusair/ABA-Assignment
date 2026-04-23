@@ -400,11 +400,15 @@ elif page == "🚉 Station Intelligence":
                        color_continuous_scale='Purples',
                        aspect='auto', height=420,
                        labels={'color':'Trips'})
-    fig_hm.update_layout(**PLOT_LAYOUT,
-                          xaxis=dict(color='white', tickfont=dict(color='white')),
-                          yaxis=dict(color='white', tickfont=dict(color='white')),
-                          coloraxis_colorbar=dict(tickfont=dict(color='white'),
-                                                  titlefont=dict(color='white')))
+    fig_hm.update_layout(
+    **PLOT_LAYOUT,
+    xaxis=dict(color='white', tickfont=dict(color='white')),
+    yaxis=dict(color='white', tickfont=dict(color='white')),
+    coloraxis_colorbar=dict(
+        tickfont=dict(color='white'),
+        title=dict(font=dict(color='white'))   # ✅ FIXED
+    )
+)
     st.plotly_chart(fig_hm, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════
