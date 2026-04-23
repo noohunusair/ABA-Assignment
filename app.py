@@ -437,9 +437,11 @@ elif page == "🗺️  Route & Distance Analysis":
                      labels={'Route':'','Trips':'Trips'})
         fig.update_traces(texttemplate='%{text:,}', textposition='outside',
                           textfont_color='white')
-        fig.update_layout(**PLOT_LAYOUT,
-                          xaxis={**AXIS_STYLE, "tickfont": dict(size=10, color='white')}
-                          yaxis = {**AXIS_STYLE, "tickfont": dict(size=10, color='white')}
+        fig.update_layout(
+    **PLOT_LAYOUT,
+    xaxis={**AXIS_STYLE, "tickfont": dict(size=10, color='white')},
+    yaxis={**AXIS_STYLE, "tickfont": dict(size=10, color='white')}
+)
                           coloraxis_showscale=False)
         st.plotly_chart(fig, use_container_width=True)
 
