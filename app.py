@@ -1,5 +1,5 @@
 # ============================================================
-# DELHI METRO ANALYTICS DASHBOARD
+# DELHI METRO — CROWD PREDICTION DASHBOARD
 # MBA Applied Business Analytics
 # ============================================================
 
@@ -9,11 +9,12 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from datetime import datetime, date, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
 st.set_page_config(
-    page_title="Delhi Metro Analytics",
+    page_title="Delhi Metro Crowd Predictor",
     page_icon="🚇",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -29,10 +30,10 @@ body { background-color: #0e1117; color: white; }
     background: linear-gradient(135deg, #1b0036, #3a0068, #6a0dad);
     color: white;
     border-radius: 15px;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
     border: 1px solid #7b2fbe;
 }
-.big-header h1 { font-size: 2.4rem; font-weight: 900; margin: 0; color: white; }
+.big-header h1 { font-size: 2.2rem; font-weight: 900; margin: 0; color: white; }
 .big-header p  { font-size: 1rem; margin: 0.5rem 0 0 0; color: #ce93d8; }
 .kpi-card {
     background: linear-gradient(135deg, #1b0036, #2d1b69);
@@ -41,40 +42,49 @@ body { background-color: #0e1117; color: white; }
     padding: 1.2rem;
     text-align: center;
     color: white;
+    margin-bottom: 0.5rem;
 }
 .kpi-card .kpi-value { font-size: 1.8rem; font-weight: 900; color: #ce93d8; }
-.kpi-card .kpi-label { font-size: 0.85rem; color: #ab47bc; margin-top: 0.3rem; }
-.state-card-green {
-    background: #0a2e0a; border: 1.5px solid #2ecc71;
-    border-radius: 10px; padding: 0.8rem 1rem; margin: 0.4rem 0; color: white;
+.kpi-card .kpi-label { font-size: 0.82rem; color: #ab47bc; margin-top: 0.3rem; }
+.crowd-low    { background: linear-gradient(135deg,#0a2e0a,#0d3b0d); border:2px solid #2ecc71; border-radius:14px; padding:1.5rem; text-align:center; }
+.crowd-medium { background: linear-gradient(135deg,#2e2200,#3b2c00); border:2px solid #f39c12; border-radius:14px; padding:1.5rem; text-align:center; }
+.crowd-high   { background: linear-gradient(135deg,#2e0a0a,#3b0d0d); border:2px solid #e74c3c; border-radius:14px; padding:1.5rem; text-align:center; }
+.prediction-box {
+    background: linear-gradient(135deg, #0d001e, #1b0036);
+    border: 2px solid #7b2fbe;
+    border-radius: 16px;
+    padding: 2rem;
+    text-align: center;
+    margin: 1rem 0;
 }
-.state-card-red {
-    background: #2e0a0a; border: 1.5px solid #e74c3c;
-    border-radius: 10px; padding: 0.8rem 1rem; margin: 0.4rem 0; color: white;
+.section-header {
+    font-size: 1.2rem; font-weight: 700; color: #ce93d8;
+    margin: 1rem 0 0.5rem 0;
+    border-bottom: 2px solid #7b2fbe; padding-bottom: 0.3rem;
 }
 .insight-box {
-    background: #1b003622;
+    background: rgba(27,0,54,0.5);
     border-left: 4px solid #ab47bc;
     padding: 1rem 1.2rem;
     border-radius: 8px;
-    margin: 0.8rem 0;
+    margin: 0.6rem 0;
     color: white;
-    font-size: 0.95rem;
+    font-size: 0.93rem;
 }
-.section-header {
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: #ce93d8;
-    margin: 1rem 0 0.5rem 0;
-    border-bottom: 2px solid #7b2fbe;
-    padding-bottom: 0.3rem;
+.station-card {
+    background: linear-gradient(135deg,#1b0036,#2d1b69);
+    border: 1px solid #7b2fbe;
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+    margin: 0.3rem 0;
+    color: white;
+    display: flex; align-items: center;
 }
 </style>
 """, unsafe_allow_html=True)
 
 PLOT_LAYOUT = dict(
-    plot_bgcolor='#0e1117',
-    paper_bgcolor='#0e1117',
+    plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
     font=dict(color='white', size=12),
 )
 AXIS_STYLE = dict(gridcolor='#1f2937', color='white',
@@ -83,43 +93,86 @@ AXIS_STYLE = dict(gridcolor='#1f2937', color='white',
 LEGEND_STYLE = dict(font=dict(color='white'),
                     bgcolor='#1b0036', bordercolor='#7b2fbe')
 
-# ── Data Loading & Cleaning ───────────────────────────────────
+# ── Data Loading ──────────────────────────────────────────────
 @st.cache_data
 def load_data():
     df = pd.read_csv('delhi_metro_updated.csv')
-
-    # Clean station names
     df['From_Station'] = df['From_Station'].str.strip().str.title()
     df['To_Station']   = df['To_Station'].str.strip().str.title()
-
-    # Parse dates
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df['Date']         = pd.to_datetime(df['Date'], errors='coerce')
     df = df.dropna(subset=['Date'])
     df['Year']      = df['Date'].dt.year
     df['Month']     = df['Date'].dt.month
     df['Month_Name']= df['Date'].dt.strftime('%b')
     df['DayOfWeek'] = df['Date'].dt.day_name()
     df['Quarter']   = df['Date'].dt.to_period('Q').astype(str)
-
-    # Fill / clean categoricals
-    df['Ticket_Type'] = df['Ticket_Type'].fillna('Unknown').str.strip()
-    df['Remarks']     = df['Remarks'].fillna('Normal').str.strip()
-    df['Remarks']     = df['Remarks'].replace('', 'Normal')
-
-    # Numeric
-    df['Passengers']       = pd.to_numeric(df['Passengers'], errors='coerce')
-    df['Fare']             = pd.to_numeric(df['Fare'], errors='coerce')
-    df['Distance_km']      = pd.to_numeric(df['Distance_km'], errors='coerce')
-    df['Cost_per_passenger']= pd.to_numeric(df['Cost_per_passenger'], errors='coerce')
-
+    df['Ticket_Type']= df['Ticket_Type'].fillna('Unknown').str.strip()
+    df['Remarks']    = df['Remarks'].fillna('Normal').str.strip().replace('','Normal')
+    for col in ['Passengers','Fare','Distance_km','Cost_per_passenger']:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
     df['Revenue'] = df['Fare'] * df['Passengers'].fillna(1)
-
-    # Route label
-    df['Route'] = df['From_Station'] + ' → ' + df['To_Station']
-
+    df['Route']   = df['From_Station'] + ' → ' + df['To_Station']
     return df
 
+@st.cache_data
+def build_prediction_model(df):
+    """
+    Statistical crowd prediction model built from historical data.
+    For each station × day-of-week × condition → computes expected trip volume
+    (crowd index), average passengers, and derived crowd level (Low/Medium/High).
+    """
+    # 1. Station × condition × DOW trip volumes (crowd proxy)
+    sc = df.groupby(['From_Station','Remarks','DayOfWeek']).agg(
+        avg_passengers=('Passengers','mean'),
+        std_passengers=('Passengers','std'),
+        trip_count    =('TripID','count'),
+        avg_fare      =('Fare','mean'),
+    ).reset_index()
+    sc['std_passengers'] = sc['std_passengers'].fillna(2.0)
+
+    # 2. Station trip-volume rank (station importance weight)
+    st_vol = df.groupby('From_Station').size().reset_index(name='total_trips')
+    st_vol['station_weight'] = (st_vol['total_trips'] - st_vol['total_trips'].min()) / \
+                               (st_vol['total_trips'].max() - st_vol['total_trips'].min())
+    sc = sc.merge(st_vol, on='From_Station')
+
+    # 3. Monthly seasonality factor per station
+    mon_avg = df.groupby(['From_Station','Month'])['Passengers'].mean().reset_index()
+    mon_avg.columns = ['From_Station','Month','monthly_avg']
+
+    # 4. Condition multipliers (derived from real data)
+    cond_mult = df.groupby('Remarks')['Passengers'].mean()
+    global_mean = df['Passengers'].mean()
+    cond_factor = (cond_mult / global_mean).to_dict()
+
+    # 5. Crowd score = trip_count × condition_factor × station_weight
+    # Normalise trip_count per station/DOW combination to 0–100
+    max_tc = sc['trip_count'].max()
+    min_tc = sc['trip_count'].min()
+    sc['crowd_score'] = (
+        ((sc['trip_count'] - min_tc) / (max_tc - min_tc)) * 60 +
+        sc['station_weight'] * 30 +
+        sc['Remarks'].map(cond_factor).fillna(1.0) * 10
+    ).clip(0, 100)
+
+    # 6. Assign crowd level labels
+    def crowd_label(score):
+        if score < 35:   return 'Low',    '#2ecc71', '🟢'
+        elif score < 65: return 'Medium', '#f39c12', '🟡'
+        else:            return 'High',   '#e74c3c', '🔴'
+
+    sc[['crowd_level','crowd_color','crowd_emoji']] = sc['crowd_score'].apply(
+        lambda s: pd.Series(crowd_label(s))
+    )
+    return sc, mon_avg, cond_factor
+
 df = load_data()
+sc_model, mon_avg, cond_factor = build_prediction_model(df)
+
+ALL_STATIONS  = sorted(df['From_Station'].unique().tolist())
+ALL_CONDITIONS= ['peak','off-peak','weekend','festival','maintenance']
+DOW_ORDER     = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+MONTH_NAMES   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 # ── Sidebar ───────────────────────────────────────────────────
 st.sidebar.markdown("""
@@ -129,79 +182,370 @@ border-radius:12px; margin-bottom:1rem;
 border:1px solid #7b2fbe;'>
 <div style='font-size:2rem;'>🚇</div>
 <div style='color:white; font-size:1.1rem; font-weight:700;'>Delhi Metro</div>
-<div style='color:#ce93d8; font-size:0.78rem;'>Analytics Dashboard</div>
+<div style='color:#ce93d8; font-size:0.78rem;'>Crowd Prediction System</div>
 </div>
 """, unsafe_allow_html=True)
 
-page = st.sidebar.radio(
-    "Navigate",
-    [
-        "🏠 Overview Dashboard",
-        "🚉 Station Intelligence",
-        "🗺️  Route & Distance Analysis",
-        "🎫 Ticket & Demand Patterns",
-        "📅 Time Series Trends",
-        "💡 Insights & Recommendations",
-    ]
-)
-
-# ── Sidebar filters ───────────────────────────────────────────
-st.sidebar.markdown("---")
-st.sidebar.markdown("<div style='color:#ce93d8; font-weight:700; font-size:0.9rem;'>🔧 Global Filters</div>", unsafe_allow_html=True)
-
-year_opts = sorted(df['Year'].dropna().unique().tolist())
-sel_years = st.sidebar.multiselect("Year", year_opts, default=year_opts)
-
-ticket_opts = sorted(df['Ticket_Type'].dropna().unique().tolist())
-sel_tickets = st.sidebar.multiselect("Ticket Type", ticket_opts, default=ticket_opts)
-
-# Apply filters
-mask = (df['Year'].isin(sel_years)) & (df['Ticket_Type'].isin(sel_tickets))
-dff  = df[mask].copy()
+page = st.sidebar.radio("Navigate", [
+    "🔮 Predict Crowd",
+    "🗺️ All Stations Forecast",
+    "📊 Station Deep Dive",
+    "📅 Weekly & Seasonal Trends",
+    "🏆 Crowd Risk Ranking",
+])
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("<div style='color:#ce93d8;font-weight:700;font-size:0.9rem;'>ℹ️ Model Info</div>", unsafe_allow_html=True)
 st.sidebar.markdown(f"""
 <div style='font-size:0.8rem; color:#ce93d8; padding:0.5rem;
 background:#0d001e; border-radius:8px; border:1px solid #3a0068;'>
-<b style='color:#ab47bc;'>Dataset Info</b><br>
-Total Records : {len(df):,}<br>
-Filtered      : {len(dff):,}<br>
-Date Range    : 2022 – 2024<br>
-Stations      : {df['From_Station'].nunique()}<br>
-Ticket Types  : {df['Ticket_Type'].nunique()}<br>
+<b style='color:#ab47bc;'>Training Data</b><br>
+Records  : {len(df):,}<br>
+Stations : {df['From_Station'].nunique()}<br>
+Period   : 2022 – 2024<br>
+Model    : Historical Aggregate +<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Condition Multipliers<br>
+Accuracy : Station-level crowd<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pattern prediction
 </div>
 """, unsafe_allow_html=True)
 
+
 # ══════════════════════════════════════════════════════════════
-# PAGE 1 — OVERVIEW DASHBOARD
+# PAGE 1 — PREDICT CROWD (SINGLE STATION PREDICTOR)
 # ══════════════════════════════════════════════════════════════
-if page == "🏠 Overview Dashboard":
+if page == "🔮 Predict Crowd":
 
     st.markdown("""
     <div class='big-header'>
-    <h1>🚇 Delhi Metro Analytics Dashboard</h1>
-    <p>Comprehensive Ridership, Revenue & Operational Analysis (2022–2024) | MBA Applied Business Analytics</p>
+    <h1>🔮 Delhi Metro Crowd Predictor</h1>
+    <p>Select a station, date & condition to predict expected crowd level and passenger load</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # KPI Row
-    total_trips    = len(dff)
-    total_revenue  = dff['Revenue'].sum()
-    avg_fare       = dff['Fare'].mean()
-    avg_dist       = dff['Distance_km'].mean()
-    total_pax      = dff['Passengers'].sum()
-    busiest_station= dff['From_Station'].value_counts().idxmax()
+    # ── Input Form ────────────────────────────────────────────
+    st.markdown("<div class='section-header'>🎛️ Prediction Inputs</div>", unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4)
 
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-    kpis = [
-        (col1, f"{total_trips:,}",           "Total Trips"),
-        (col2, f"₹{total_revenue/1e6:.1f}M", "Total Revenue"),
-        (col3, f"₹{avg_fare:.0f}",           "Avg Fare"),
-        (col4, f"{avg_dist:.1f} km",          "Avg Distance"),
-        (col5, f"{total_pax/1e6:.1f}M",       "Total Passengers"),
-        (col6, busiest_station,               "Busiest Origin"),
+    with c1:
+        station = st.selectbox("🚉 Station", ALL_STATIONS, index=ALL_STATIONS.index('Rajiv Chowk'))
+    with c2:
+        pred_date = st.date_input("📅 Date", value=date.today() + timedelta(days=1),
+                                   min_value=date(2024,1,1), max_value=date(2026,12,31))
+    with c3:
+        condition = st.selectbox("⚡ Service Condition",
+                                  ALL_CONDITIONS,
+                                  format_func=lambda x: {
+                                      'peak':'🔴 Peak Hour','off-peak':'🔵 Off-Peak',
+                                      'weekend':'🟢 Weekend','festival':'🟡 Festival',
+                                      'maintenance':'🟠 Maintenance'
+                                  }.get(x, x))
+    with c4:
+        ticket_type = st.selectbox("🎫 Ticket Type",
+                                    ['All','Smart Card','Tourist Card','Single','Return'])
+
+    pred_dow   = pred_date.strftime('%A')
+    pred_month = pred_date.month
+
+    # ── Run Prediction ────────────────────────────────────────
+    row = sc_model[
+        (sc_model['From_Station'] == station) &
+        (sc_model['Remarks']      == condition) &
+        (sc_model['DayOfWeek']    == pred_dow)
     ]
-    for col, val, lbl in kpis:
+
+    if row.empty:
+        # Fallback: station × condition only
+        row = sc_model[
+            (sc_model['From_Station'] == station) &
+            (sc_model['Remarks']      == condition)
+        ]
+
+    if not row.empty:
+        r = row.iloc[0]
+        base_pax   = r['avg_passengers']
+        std_pax    = r['std_passengers']
+        crowd_score= r['crowd_score']
+        crowd_lvl  = r['crowd_level']
+        crowd_col  = r['crowd_color']
+        crowd_emoji= r['crowd_emoji']
+
+        # Apply monthly seasonality
+        mon_row = mon_avg[(mon_avg['From_Station'] == station) &
+                          (mon_avg['Month']         == pred_month)]
+        if not mon_row.empty:
+            global_avg = df['Passengers'].mean()
+            mon_factor = mon_row.iloc[0]['monthly_avg'] / global_avg
+            base_pax   = base_pax * mon_factor
+
+        pred_low  = max(4, int(base_pax - std_pax))
+        pred_high = min(41, int(base_pax + std_pax))
+        pred_mid  = int(base_pax)
+
+        # Crowd CSS class
+        crowd_class = {
+            'Low':'crowd-low', 'Medium':'crowd-medium', 'High':'crowd-high'
+        }.get(crowd_lvl, 'crowd-medium')
+
+        wait_time  = {'Low':1,'Medium':4,'High':8}.get(crowd_lvl, 3)
+        advice     = {
+            'Low'    : 'Great time to travel — platforms will be comfortable.',
+            'Medium' : 'Moderate crowd expected — allow a little extra time.',
+            'High'   : 'High crowd expected — plan extra wait time & consider off-peak.',
+        }.get(crowd_lvl, '')
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Prediction Result Card ────────────────────────────────
+    col_main, col_side = st.columns([1.6, 1])
+
+    with col_main:
+        st.markdown(f"""
+        <div class='prediction-box'>
+            <div style='font-size:3.5rem; margin-bottom:0.5rem;'>{crowd_emoji}</div>
+            <div style='font-size:1.1rem; color:#ab47bc; margin-bottom:0.3rem;'>
+                {station} · {pred_dow} · {MONTH_NAMES[pred_month-1]} {pred_date.day}
+            </div>
+            <div style='font-size:2.8rem; font-weight:900; color:{crowd_col};
+                        margin: 0.5rem 0;'>
+                {crowd_lvl} Crowd
+            </div>
+            <div style='font-size:1.3rem; color:white; margin: 0.4rem 0;'>
+                Expected Passengers: <b style='color:#ce93d8;'>
+                {pred_low} – {pred_high}</b> per trip
+            </div>
+            <div style='background:rgba(255,255,255,0.06); border-radius:10px;
+                        padding:0.6rem 1rem; margin:0.8rem auto; max-width:480px;'>
+                <span style='color:#ab47bc; font-size:0.92rem;'>{advice}</span>
+            </div>
+            <div style='display:flex; justify-content:center; gap:2rem; margin-top:1rem;'>
+                <div>
+                    <div style='font-size:1.6rem; font-weight:800;
+                                color:#ce93d8;'>{pred_mid}</div>
+                    <div style='font-size:0.78rem; color:#9e9e9e;'>Predicted Passengers</div>
+                </div>
+                <div>
+                    <div style='font-size:1.6rem; font-weight:800;
+                                color:#f39c12;'>{crowd_score:.0f}/100</div>
+                    <div style='font-size:0.78rem; color:#9e9e9e;'>Crowd Score</div>
+                </div>
+                <div>
+                    <div style='font-size:1.6rem; font-weight:800;
+                                color:#e74c3c;'>~{wait_time} min</div>
+                    <div style='font-size:0.78rem; color:#9e9e9e;'>Est. Wait Time</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_side:
+        # Gauge chart for crowd score
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=crowd_score,
+            domain={'x':[0,1], 'y':[0,1]},
+            title={'text':"Crowd Score", 'font':{'color':'white','size':16}},
+            number={'font':{'color':'white','size':36}},
+            gauge={
+                'axis':{'range':[0,100], 'tickcolor':'white',
+                        'tickfont':{'color':'white'}},
+                'bar':{'color': crowd_col},
+                'bgcolor':'#1b0036',
+                'bordercolor':'#7b2fbe',
+                'steps':[
+                    {'range':[0, 35],  'color':'#0a2e0a'},
+                    {'range':[35, 65], 'color':'#2e2200'},
+                    {'range':[65, 100],'color':'#2e0a0a'},
+                ],
+                'threshold':{
+                    'line':{'color':crowd_col,'width':4},
+                    'thickness':0.8,
+                    'value':crowd_score
+                }
+            }
+        ))
+        fig_gauge.update_layout(
+            height=280, margin=dict(l=20,r=20,t=40,b=20),
+            paper_bgcolor='#0e1117', font=dict(color='white')
+        )
+        st.plotly_chart(fig_gauge, use_container_width=True)
+
+        # Quick tips
+        st.markdown(f"""
+        <div style='background:#1b0036; border:1px solid #7b2fbe;
+        border-radius:10px; padding:1rem; font-size:0.88rem; color:white;'>
+        <b style='color:#ce93d8;'>📌 Quick Tips</b><br><br>
+        {'✅ Best time to travel!' if crowd_lvl=='Low' else '⚠️ Moderate congestion.' if crowd_lvl=='Medium' else '🚨 High congestion period.'}<br><br>
+        <b style='color:#ab47bc;'>Condition:</b> {condition.title()}<br>
+        <b style='color:#ab47bc;'>Day:</b> {pred_dow}<br>
+        <b style='color:#ab47bc;'>Month:</b> {MONTH_NAMES[pred_month-1]}<br>
+        <b style='color:#ab47bc;'>Ticket:</b> {ticket_type}
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── 7-Day Forecast for this station ──────────────────────
+    st.markdown("<div class='section-header'>📅 7-Day Crowd Forecast</div>", unsafe_allow_html=True)
+
+    forecast_rows = []
+    for i in range(7):
+        fdate = pred_date + timedelta(days=i)
+        fdow  = fdate.strftime('%A')
+        fmon  = fdate.month
+        # Auto-assign condition: weekends → weekend, otherwise use selected condition
+        fcond = 'weekend' if fdow in ['Saturday','Sunday'] else condition
+
+        fr = sc_model[
+            (sc_model['From_Station'] == station) &
+            (sc_model['Remarks']      == fcond) &
+            (sc_model['DayOfWeek']    == fdow)
+        ]
+        if fr.empty:
+            fr = sc_model[
+                (sc_model['From_Station'] == station) &
+                (sc_model['Remarks']      == fcond)
+            ]
+        if not fr.empty:
+            rr      = fr.iloc[0]
+            fp      = rr['avg_passengers']
+            fs      = rr['crowd_score']
+            fl, fc, fe = rr['crowd_level'], rr['crowd_color'], rr['crowd_emoji']
+        else:
+            fp, fs, fl, fc, fe = 20, 50, 'Medium', '#f39c12', '🟡'
+
+        forecast_rows.append({
+            'Date': fdate.strftime('%a %d %b'),
+            'Passengers': int(fp),
+            'Crowd_Score': round(fs, 1),
+            'Crowd_Level': fl,
+            'Color': fc,
+            'Emoji': fe,
+            'Condition': fcond,
+        })
+
+    fdf = pd.DataFrame(forecast_rows)
+
+    # Bar chart for 7-day forecast
+    fig_7d = go.Figure()
+    color_map = {'Low':'#2ecc71', 'Medium':'#f39c12', 'High':'#e74c3c'}
+    for lvl, grp in fdf.groupby('Crowd_Level'):
+        fig_7d.add_trace(go.Bar(
+            x=grp['Date'], y=grp['Crowd_Score'],
+            name=f'{lvl} Crowd',
+            marker_color=color_map.get(lvl,'#ab47bc'),
+            text=[f"{fe} {fl}" for fe, fl in zip(grp['Emoji'], grp['Crowd_Level'])],
+            textposition='outside', textfont=dict(color='white', size=11),
+        ))
+    fig_7d.update_layout(
+        **PLOT_LAYOUT,
+        height=320, barmode='stack',
+        xaxis=dict(**AXIS_STYLE, title=''),
+        yaxis=dict(**AXIS_STYLE, title='Crowd Score (0–100)', range=[0, 115]),
+        legend=LEGEND_STYLE,
+        title=dict(text=f'7-Day Crowd Score Forecast — {station}',
+                   font=dict(color='white', size=14), x=0.5),
+    )
+    st.plotly_chart(fig_7d, use_container_width=True)
+
+    # Table view
+    display_cols = ['Date','Condition','Passengers','Crowd_Score','Crowd_Level']
+    st.dataframe(
+        fdf[display_cols].style
+            .applymap(lambda v: f'color: {color_map.get(v,"white")}',
+                      subset=['Crowd_Level'])
+            .format({'Passengers':'{:.0f}','Crowd_Score':'{:.1f}'}),
+        use_container_width=True, height=290
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+# PAGE 2 — ALL STATIONS FORECAST
+# ══════════════════════════════════════════════════════════════
+elif page == "🗺️ All Stations Forecast":
+
+    st.markdown("""
+    <div class='big-header'>
+    <h1>🗺️ All Stations Crowd Forecast</h1>
+    <p>Live crowd predictions across all 24 Delhi Metro stations for a selected date & condition</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        all_date = st.date_input("📅 Date",
+                                  value=date.today() + timedelta(days=1),
+                                  min_value=date(2024,1,1),
+                                  max_value=date(2026,12,31),
+                                  key='all_date')
+    with col2:
+        all_cond = st.selectbox("⚡ Service Condition",
+                                 ALL_CONDITIONS,
+                                 format_func=lambda x: {
+                                     'peak':'🔴 Peak Hour','off-peak':'🔵 Off-Peak',
+                                     'weekend':'🟢 Weekend','festival':'🟡 Festival',
+                                     'maintenance':'🟠 Maintenance'
+                                 }.get(x, x), key='all_cond')
+    with col3:
+        sort_by = st.selectbox("🔃 Sort By",
+                                ['Crowd Score ↓','Crowd Score ↑',
+                                 'Station A–Z','Passengers ↓'])
+
+    all_dow   = all_date.strftime('%A')
+    all_month = all_date.month
+
+    # Build per-station predictions
+    station_preds = []
+    for stn in ALL_STATIONS:
+        row = sc_model[
+            (sc_model['From_Station'] == stn) &
+            (sc_model['Remarks']      == all_cond) &
+            (sc_model['DayOfWeek']    == all_dow)
+        ]
+        if row.empty:
+            row = sc_model[(sc_model['From_Station']==stn) & (sc_model['Remarks']==all_cond)]
+        if row.empty:
+            row = sc_model[sc_model['From_Station'] == stn]
+
+        if not row.empty:
+            r  = row.iloc[0]
+            fp = r['avg_passengers']
+            fs = r['crowd_score']
+            fl, fc, fe = r['crowd_level'], r['crowd_color'], r['crowd_emoji']
+        else:
+            fp, fs, fl, fc, fe = 20, 50, 'Medium', '#f39c12', '🟡'
+
+        station_preds.append({
+            'Station': stn, 'Passengers': round(fp,1),
+            'Crowd_Score': round(fs,1),
+            'Crowd_Level': fl, 'Color': fc, 'Emoji': fe,
+        })
+
+    spdf = pd.DataFrame(station_preds)
+
+    # Sort
+    if sort_by == 'Crowd Score ↓':
+        spdf = spdf.sort_values('Crowd_Score', ascending=False)
+    elif sort_by == 'Crowd Score ↑':
+        spdf = spdf.sort_values('Crowd_Score')
+    elif sort_by == 'Station A–Z':
+        spdf = spdf.sort_values('Station')
+    else:
+        spdf = spdf.sort_values('Passengers', ascending=False)
+
+    # Summary KPIs
+    high_ct = (spdf['Crowd_Level']=='High').sum()
+    med_ct  = (spdf['Crowd_Level']=='Medium').sum()
+    low_ct  = (spdf['Crowd_Level']=='Low').sum()
+    avg_score = spdf['Crowd_Score'].mean()
+
+    k1, k2, k3, k4 = st.columns(4)
+    for col, val, lbl in [
+        (k1, f"{high_ct}", "🔴 High Crowd Stations"),
+        (k2, f"{med_ct}",  "🟡 Medium Crowd Stations"),
+        (k3, f"{low_ct}",  "🟢 Low Crowd Stations"),
+        (k4, f"{avg_score:.0f}/100", "📊 Avg Crowd Score"),
+    ]:
         with col:
             st.markdown(f"""
             <div class='kpi-card'>
@@ -211,710 +555,396 @@ if page == "🏠 Overview Dashboard":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Monthly trips trend
-    col_l, col_r = st.columns([2, 1])
+    # Horizontal bar chart — all stations
+    st.markdown("<div class='section-header'>📊 Crowd Score — All Stations</div>", unsafe_allow_html=True)
+    color_map2 = {'Low':'#2ecc71','Medium':'#f39c12','High':'#e74c3c'}
 
-    with col_l:
-        st.markdown("<div class='section-header'>📈 Monthly Trip Volume (2022–2024)</div>", unsafe_allow_html=True)
-        monthly = (dff.groupby(['Year','Month','Month_Name'])
-                      .size().reset_index(name='Trips'))
-        monthly['YM'] = monthly['Year'].astype(str) + '-' + monthly['Month'].astype(str).str.zfill(2)
-        monthly = monthly.sort_values('YM')
+    fig_all = go.Figure()
+    for lvl in ['High','Medium','Low']:
+        sub = spdf[spdf['Crowd_Level']==lvl]
+        if sub.empty: continue
+        fig_all.add_trace(go.Bar(
+            y=sub['Station'], x=sub['Crowd_Score'],
+            orientation='h', name=f'{lvl} Crowd',
+            marker_color=color_map2[lvl],
+            text=[f"{e} {s:.0f}" for e, s in zip(sub['Emoji'], sub['Crowd_Score'])],
+            textposition='outside', textfont=dict(color='white'),
+        ))
+    fig_all.update_layout(
+        **PLOT_LAYOUT, height=600, barmode='overlay',
+        xaxis=dict(**AXIS_STYLE, title='Crowd Score (0–100)', range=[0,115]),
+        yaxis=dict(**AXIS_STYLE, title=''),
+        legend=LEGEND_STYLE,
+        title=dict(text=f'All Stations Crowd Forecast — {all_dow} · {all_cond.title()}',
+                   font=dict(color='white', size=14), x=0.5),
+    )
+    st.plotly_chart(fig_all, use_container_width=True)
 
-        fig = px.area(monthly, x='YM', y='Trips',
-                      color_discrete_sequence=['#ab47bc'],
-                      labels={'YM':'Month','Trips':'Trips'},
-                      height=340)
-        fig.update_layout(**PLOT_LAYOUT,
-                          xaxis=dict(**AXIS_STYLE, title=''),
-                          yaxis=dict(**AXIS_STYLE),
-                          title=dict(text='', font=dict(color='white')))
-        fig.update_traces(fillcolor='rgba(171,71,188,0.25)', line_color='#ce93d8')
-        st.plotly_chart(fig, use_container_width=True)
+    # ── Station Cards Grid ────────────────────────────────────
+    st.markdown("<div class='section-header'>🚉 Station-by-Station Prediction Cards</div>", unsafe_allow_html=True)
 
-    with col_r:
-        st.markdown("<div class='section-header'>🎟️ Ticket Type Split</div>", unsafe_allow_html=True)
-        tt = dff['Ticket_Type'].value_counts().reset_index()
-        tt.columns = ['Ticket_Type','Count']
-        fig_tt = px.pie(tt, names='Ticket_Type', values='Count',
-                        color_discrete_sequence=px.colors.sequential.Purples_r,
-                        height=330, hole=0.4)
-        fig_tt.update_layout(**PLOT_LAYOUT,
-                              legend=LEGEND_STYLE,
-                              title=dict(text='', font=dict(color='white')))
-        fig_tt.update_traces(textfont_color='white', textinfo='percent+label')
-        st.plotly_chart(fig_tt, use_container_width=True)
+    card_cols = st.columns(3)
+    for i, (_, row) in enumerate(spdf.iterrows()):
+        card_class = {
+            'Low':'crowd-low', 'Medium':'crowd-medium', 'High':'crowd-high'
+        }.get(row['Crowd_Level'], 'crowd-medium')
+        with card_cols[i % 3]:
+            st.markdown(f"""
+            <div class='{card_class}' style='margin-bottom:0.7rem; padding:1rem;
+            border-radius:12px; text-align:center;'>
+                <div style='font-size:1.5rem;'>{row['Emoji']}</div>
+                <div style='font-weight:700; font-size:1rem; color:white;
+                            margin:0.3rem 0;'>{row['Station']}</div>
+                <div style='font-size:1.4rem; font-weight:900;
+                            color:{row['Color']};'>{row['Crowd_Level']}</div>
+                <div style='font-size:0.82rem; color:#aaa; margin-top:0.2rem;'>
+                    Score: {row['Crowd_Score']:.0f} &nbsp;|&nbsp;
+                    ~{row['Passengers']:.0f} pax/trip
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Remarks breakdown + YoY Revenue
-    col_a, col_b = st.columns(2)
-
-    with col_a:
-        st.markdown("<div class='section-header'>⚡ Trip Condition Breakdown</div>", unsafe_allow_html=True)
-        rem = dff['Remarks'].value_counts().reset_index()
-        rem.columns = ['Remarks','Count']
-        color_map_rem = {
-            'peak'       : '#e74c3c',
-            'off-peak'   : '#3498db',
-            'weekend'    : '#2ecc71',
-            'festival'   : '#f39c12',
-            'maintenance': '#e67e22',
-            'Normal'     : '#9b59b6',
-        }
-        fig_rem = px.bar(rem, x='Remarks', y='Count',
-                         color='Remarks',
-                         color_discrete_map=color_map_rem,
-                         text='Count', height=320,
-                         labels={'Count':'Trips','Remarks':''})
-        fig_rem.update_traces(texttemplate='%{text:,}', textposition='outside',
-                              textfont_color='white')
-        fig_rem.update_layout(**PLOT_LAYOUT,
-                               xaxis=dict(**AXIS_STYLE),
-                               yaxis=dict(**AXIS_STYLE),
-                               showlegend=False)
-        st.plotly_chart(fig_rem, use_container_width=True)
-
-    with col_b:
-        st.markdown("<div class='section-header'>💰 Yearly Revenue Comparison</div>", unsafe_allow_html=True)
-        yr_rev = (dff.groupby('Year')['Revenue']
-                     .sum().reset_index()
-                     .rename(columns={'Revenue':'Total_Revenue'}))
-        fig_yr = px.bar(yr_rev, x='Year', y='Total_Revenue',
-                        text='Total_Revenue',
-                        color_discrete_sequence=['#ab47bc'],
-                        height=320,
-                        labels={'Total_Revenue':'Revenue (₹)','Year':''})
-        fig_yr.update_traces(texttemplate='₹%{text:,.0f}', textposition='outside',
-                              textfont_color='white',
-                              marker_color=['#7b2fbe','#ab47bc','#ce93d8'])
-        fig_yr.update_layout(**PLOT_LAYOUT,
-                              xaxis=dict(**AXIS_STYLE),
-                              yaxis=dict(**AXIS_STYLE))
-        st.plotly_chart(fig_yr, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════
-# PAGE 2 — STATION INTELLIGENCE
+# PAGE 3 — STATION DEEP DIVE
 # ══════════════════════════════════════════════════════════════
-elif page == "🚉 Station Intelligence":
+elif page == "📊 Station Deep Dive":
 
     st.markdown("""
     <div class='big-header'>
-    <h1>🚉 Station Intelligence</h1>
-    <p>Origin / Destination traffic, revenue, and demand heatmap by station</p>
+    <h1>📊 Station Deep Dive</h1>
+    <p>Historical crowd patterns, passenger load, and condition breakdown for any station</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Top Origin stations
+    sel_stn = st.selectbox("🚉 Choose Station", ALL_STATIONS,
+                             index=ALL_STATIONS.index('Rajiv Chowk'))
+
+    stn_df = df[df['From_Station'] == sel_stn]
+
+    # KPIs
+    total_t   = len(stn_df)
+    avg_pax   = stn_df['Passengers'].mean()
+    avg_fare  = stn_df['Fare'].mean()
+    total_rev = stn_df['Revenue'].sum()
+    top_dest  = stn_df['To_Station'].value_counts().idxmax()
+
+    k1,k2,k3,k4,k5 = st.columns(5)
+    for col, val, lbl in [
+        (k1, f"{total_t:,}",      "Total Trips"),
+        (k2, f"{avg_pax:.1f}",    "Avg Passengers"),
+        (k3, f"₹{avg_fare:.0f}", "Avg Fare"),
+        (k4, f"₹{total_rev/1e6:.1f}M","Total Revenue"),
+        (k5, top_dest,             "Top Destination"),
+    ]:
+        with col:
+            st.markdown(f"""
+            <div class='kpi-card'>
+            <div class='kpi-value'>{val}</div>
+            <div class='kpi-label'>{lbl}</div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
     col_l, col_r = st.columns(2)
 
     with col_l:
-        st.markdown("<div class='section-header'>🏆 Top 15 Origin Stations by Trips</div>", unsafe_allow_html=True)
-        top_orig = (dff['From_Station'].value_counts()
-                       .head(15).reset_index()
-                       .rename(columns={'From_Station':'Station','count':'Trips'}))
-        fig = px.bar(top_orig.sort_values('Trips'),
-                     x='Trips', y='Station', orientation='h',
-                     color='Trips',
-                     color_continuous_scale='Purples',
-                     text='Trips', height=480,
-                     labels={'Trips':'Number of Trips','Station':''})
-        fig.update_traces(texttemplate='%{text:,}', textposition='outside',
-                          textfont_color='white')
-        fig.update_layout(**PLOT_LAYOUT,
-                          xaxis=dict(**AXIS_STYLE),
-                          yaxis=dict(**AXIS_STYLE),
-                          coloraxis_showscale=False)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col_r:
-        st.markdown("<div class='section-header'>💰 Top 15 Stations by Avg Fare</div>", unsafe_allow_html=True)
-        st_fare = (dff.groupby('From_Station')['Fare']
-                      .mean().reset_index()
-                      .rename(columns={'Fare':'Avg_Fare'})
-                      .sort_values('Avg_Fare', ascending=False)
-                      .head(15))
-        fig2 = px.bar(st_fare.sort_values('Avg_Fare'),
-                      x='Avg_Fare', y='From_Station', orientation='h',
-                      color='Avg_Fare',
-                      color_continuous_scale='Purples',
-                      text='Avg_Fare', height=480,
-                      labels={'Avg_Fare':'Avg Fare (₹)','From_Station':''})
-        fig2.update_traces(texttemplate='₹%{text:.0f}', textposition='outside',
-                           textfont_color='white')
-        fig2.update_layout(**PLOT_LAYOUT,
-                           xaxis=dict(**AXIS_STYLE),
-                           yaxis=dict(**AXIS_STYLE),
-                           coloraxis_showscale=False)
-        st.plotly_chart(fig2, use_container_width=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Station-level revenue
-    st.markdown("<div class='section-header'>🏦 Station Revenue Performance (Top 20)</div>", unsafe_allow_html=True)
-    st_rev = (dff.groupby('From_Station')['Revenue']
-                 .sum().reset_index()
-                 .rename(columns={'Revenue':'Total_Revenue'})
-                 .sort_values('Total_Revenue', ascending=False)
-                 .head(20))
-    medals = ['🥇','🥈','🥉'] + ['⭐']*17
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("<div class='section-header'>🏆 Top 10 Revenue Stations</div>", unsafe_allow_html=True)
-        for i, row in st_rev.head(10).iterrows():
-            rank = list(st_rev.index).index(i)
-            st.markdown(f"""
-            <div class='state-card-green'>
-            <span style='font-size:1.1rem;'>{medals[rank]}</span>
-            <b style='color:white;'> {row['From_Station']}</b><br>
-            <span style='color:#2ecc71; font-size:0.9rem;
-            font-weight:600;'>₹{row['Total_Revenue']:,.0f}</span>
-            </div>""", unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("<div class='section-header'>📊 Revenue Distribution</div>", unsafe_allow_html=True)
-        fig_sr = px.bar(st_rev, x='From_Station', y='Total_Revenue',
-                        color='Total_Revenue',
-                        color_continuous_scale='Purples',
-                        labels={'From_Station':'Station',
-                                'Total_Revenue':'Revenue (₹)'},
-                        height=480)
-        fig_sr.update_layout(**PLOT_LAYOUT,
-                              xaxis=dict(**AXIS_STYLE, tickangle=45),
-                              yaxis=dict(**AXIS_STYLE),
-                              coloraxis_showscale=False)
-        st.plotly_chart(fig_sr, use_container_width=True)
-
-    # Heatmap: station × day of week
-    st.markdown("<div class='section-header'>🗓️ Station Traffic Heatmap (Top 12 × Day of Week)</div>", unsafe_allow_html=True)
-    top12 = dff['From_Station'].value_counts().head(12).index.tolist()
-    dow_order = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-    heat = (dff[dff['From_Station'].isin(top12)]
-               .groupby(['From_Station','DayOfWeek'])
-               .size().reset_index(name='Trips'))
-    heat['DayOfWeek'] = pd.Categorical(heat['DayOfWeek'], categories=dow_order, ordered=True)
-    heat_pivot = heat.pivot(index='From_Station', columns='DayOfWeek', values='Trips').fillna(0)
-
-    fig_hm = px.imshow(heat_pivot,
-                       color_continuous_scale='Purples',
-                       aspect='auto', height=420,
-                       labels={'color':'Trips'})
-    fig_hm.update_layout(**PLOT_LAYOUT,
-                          xaxis=dict(color='white', tickfont=dict(color='white')),
-                          yaxis=dict(color='white', tickfont=dict(color='white')),
-                          coloraxis_colorbar=dict(tickfont=dict(color='white'),
-                                                  titlefont=dict(color='white')))
-    st.plotly_chart(fig_hm, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════
-# PAGE 3 — ROUTE & DISTANCE ANALYSIS
-# ══════════════════════════════════════════════════════════════
-elif page == "🗺️  Route & Distance Analysis":
-
-    st.markdown("""
-    <div class='big-header'>
-    <h1>🗺️ Route & Distance Analysis</h1>
-    <p>Top routes, distance distribution, fare vs distance, and cost efficiency</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_l, col_r = st.columns([2,1])
-
-    with col_l:
-        st.markdown("<div class='section-header'>🔝 Top 20 Most Popular Routes</div>", unsafe_allow_html=True)
-        top_routes = (dff['Route'].value_counts()
-                         .head(20).reset_index()
-                         .rename(columns={'Route':'Route','count':'Trips'}))
-        fig = px.bar(top_routes.sort_values('Trips'),
-                     x='Trips', y='Route', orientation='h',
-                     color='Trips', color_continuous_scale='Purples',
-                     text='Trips', height=600,
-                     labels={'Route':'','Trips':'Trips'})
-        fig.update_traces(texttemplate='%{text:,}', textposition='outside',
-                          textfont_color='white')
-        fig.update_layout(**PLOT_LAYOUT,
-                          xaxis=dict(**AXIS_STYLE),
-                          yaxis=dict(**AXIS_STYLE, tickfont=dict(size=10, color='white')),
-                          coloraxis_showscale=False)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col_r:
-        st.markdown("<div class='section-header'>📏 Distance Distribution</div>", unsafe_allow_html=True)
-        fig_d = px.histogram(dff, x='Distance_km',
-                             nbins=40,
-                             color_discrete_sequence=['#ab47bc'],
-                             labels={'Distance_km':'Distance (km)','count':'Trips'},
-                             height=280)
-        fig_d.update_layout(**PLOT_LAYOUT,
-                            xaxis=dict(**AXIS_STYLE),
-                            yaxis=dict(**AXIS_STYLE))
-        st.plotly_chart(fig_d, use_container_width=True)
-
-        st.markdown("<div class='section-header'>💸 Fare Distribution</div>", unsafe_allow_html=True)
-        fig_f = px.histogram(dff, x='Fare', nbins=40,
-                             color_discrete_sequence=['#ce93d8'],
-                             labels={'Fare':'Fare (₹)','count':'Trips'},
-                             height=280)
-        fig_f.update_layout(**PLOT_LAYOUT,
-                            xaxis=dict(**AXIS_STYLE),
-                            yaxis=dict(**AXIS_STYLE))
-        st.plotly_chart(fig_f, use_container_width=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    col_a, col_b = st.columns(2)
-
-    with col_a:
-        st.markdown("<div class='section-header'>📊 Fare vs Distance (Scatter)</div>", unsafe_allow_html=True)
-        sample = dff.sample(min(5000, len(dff)), random_state=42)
-        fig_sc = px.scatter(sample, x='Distance_km', y='Fare',
-                            color='Ticket_Type',
-                            opacity=0.55, height=380,
-                            labels={'Distance_km':'Distance (km)','Fare':'Fare (₹)'},
-                            color_discrete_sequence=px.colors.sequential.Purples_r)
-        fig_sc.update_layout(**PLOT_LAYOUT,
-                              xaxis=dict(**AXIS_STYLE),
-                              yaxis=dict(**AXIS_STYLE),
-                              legend=LEGEND_STYLE)
-        st.plotly_chart(fig_sc, use_container_width=True)
-
-    with col_b:
-        st.markdown("<div class='section-header'>💰 Avg Cost Per Passenger by Ticket Type</div>", unsafe_allow_html=True)
-        cpp = (dff.groupby('Ticket_Type')['Cost_per_passenger']
-                  .mean().reset_index()
-                  .rename(columns={'Cost_per_passenger':'Avg_CPP'})
-                  .sort_values('Avg_CPP', ascending=False))
-        fig_cpp = px.bar(cpp, x='Ticket_Type', y='Avg_CPP',
-                         color='Ticket_Type',
-                         color_discrete_sequence=px.colors.sequential.Purples_r,
-                         text='Avg_CPP', height=380,
-                         labels={'Ticket_Type':'','Avg_CPP':'Avg Cost/Passenger (₹)'})
-        fig_cpp.update_traces(texttemplate='₹%{text:.1f}', textposition='outside',
-                              textfont_color='white')
-        fig_cpp.update_layout(**PLOT_LAYOUT,
-                              xaxis=dict(**AXIS_STYLE),
-                              yaxis=dict(**AXIS_STYLE),
-                              showlegend=False)
-        st.plotly_chart(fig_cpp, use_container_width=True)
-
-    # Distance band analysis
-    st.markdown("<div class='section-header'>📏 Distance Band Analysis</div>", unsafe_allow_html=True)
-    dff2 = dff.copy()
-    dff2['Distance_Band'] = pd.cut(dff2['Distance_km'],
-                                   bins=[0,3,7,12,25],
-                                   labels=['Short (0-3km)',
-                                           'Medium (3-7km)',
-                                           'Long (7-12km)',
-                                           'Very Long (12km+)'])
-    db = (dff2.groupby('Distance_Band', observed=True)
-              .agg(Trips=('TripID','count'),
-                   Avg_Fare=('Fare','mean'),
-                   Avg_Passengers=('Passengers','mean'))
-              .reset_index())
-
-    fig_db = make_subplots(rows=1, cols=3,
-                           subplot_titles=['Number of Trips',
-                                           'Avg Fare (₹)',
-                                           'Avg Passengers'],
-                           specs=[[{"type":"bar"},{"type":"bar"},{"type":"bar"}]])
-
-    colors = ['#7b2fbe','#ab47bc','#ce93d8','#e1bee7']
-    for idx, (col_name, y_col, fmt) in enumerate([
-        ('Trips','Trips','%{y:,}'),
-        ('Avg Fare','Avg_Fare','₹%{y:.0f}'),
-        ('Avg Pax','Avg_Passengers','%{y:.1f}')
-    ]):
-        fig_db.add_trace(
-            go.Bar(x=db['Distance_Band'].astype(str),
-                   y=db[y_col],
-                   marker_color=colors,
-                   text=db[y_col],
-                   texttemplate=fmt,
-                   textposition='outside',
-                   textfont=dict(color='white'),
-                   showlegend=False),
-            row=1, col=idx+1
-        )
-
-    fig_db.update_layout(height=350, **PLOT_LAYOUT)
-    fig_db.update_annotations(font_color='white')
-    for i in range(1, 4):
-        fig_db.update_xaxes(tickfont=dict(color='white', size=9),
-                            color='white', row=1, col=i)
-        fig_db.update_yaxes(tickfont=dict(color='white'),
-                            color='white', gridcolor='#1f2937',
-                            row=1, col=i)
-    st.plotly_chart(fig_db, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════
-# PAGE 4 — TICKET & DEMAND PATTERNS
-# ══════════════════════════════════════════════════════════════
-elif page == "🎫 Ticket & Demand Patterns":
-
-    st.markdown("""
-    <div class='big-header'>
-    <h1>🎫 Ticket & Demand Patterns</h1>
-    <p>Ticket type performance, peak/off-peak analysis, and passenger load insights</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Ticket type KPIs
-    st.markdown("<div class='section-header'>🎟️ Ticket Type Performance</div>", unsafe_allow_html=True)
-    tt_perf = (dff.groupby('Ticket_Type')
-                  .agg(Trips=('TripID','count'),
-                       Avg_Fare=('Fare','mean'),
-                       Avg_Distance=('Distance_km','mean'),
-                       Total_Revenue=('Revenue','sum'))
-                  .reset_index()
-                  .sort_values('Trips', ascending=False))
-
-    col1, col2 = st.columns(2)
-    with col1:
-        fig_tt1 = px.bar(tt_perf, x='Ticket_Type', y='Trips',
-                         color='Ticket_Type',
-                         color_discrete_sequence=px.colors.sequential.Purples_r,
-                         text='Trips', height=320,
-                         labels={'Ticket_Type':'','Trips':'Number of Trips'})
-        fig_tt1.update_traces(texttemplate='%{text:,}', textposition='outside',
-                              textfont_color='white')
-        fig_tt1.update_layout(**PLOT_LAYOUT,
-                              xaxis=dict(**AXIS_STYLE),
-                              yaxis=dict(**AXIS_STYLE),
-                              showlegend=False,
-                              title=dict(text='Trips by Ticket Type',
-                                         font=dict(color='white',size=13), x=0.5))
-        st.plotly_chart(fig_tt1, use_container_width=True)
-
-    with col2:
-        fig_tt2 = px.bar(tt_perf, x='Ticket_Type', y='Avg_Fare',
-                         color='Ticket_Type',
-                         color_discrete_sequence=px.colors.sequential.Purples_r,
-                         text='Avg_Fare', height=320,
-                         labels={'Ticket_Type':'','Avg_Fare':'Avg Fare (₹)'})
-        fig_tt2.update_traces(texttemplate='₹%{text:.0f}', textposition='outside',
-                              textfont_color='white')
-        fig_tt2.update_layout(**PLOT_LAYOUT,
-                              xaxis=dict(**AXIS_STYLE),
-                              yaxis=dict(**AXIS_STYLE),
-                              showlegend=False,
-                              title=dict(text='Avg Fare by Ticket Type',
-                                         font=dict(color='white',size=13), x=0.5))
-        st.plotly_chart(fig_tt2, use_container_width=True)
-
-    st.dataframe(tt_perf.style.format({
-        'Avg_Fare'     : '₹{:.2f}',
-        'Avg_Distance' : '{:.2f} km',
-        'Total_Revenue': '₹{:,.0f}',
-        'Trips'        : '{:,}'
-    }), use_container_width=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Remarks / condition analysis
-    st.markdown("<div class='section-header'>⚡ Peak vs Off-Peak vs Other Conditions</div>", unsafe_allow_html=True)
-    col_a, col_b = st.columns(2)
-
-    with col_a:
-        rem_fare = (dff.groupby('Remarks')['Fare']
-                       .mean().reset_index()
-                       .rename(columns={'Fare':'Avg_Fare'})
-                       .sort_values('Avg_Fare', ascending=False))
-        color_map_rem2 = {
+        # Crowd score by condition
+        st.markdown("<div class='section-header'>⚡ Crowd Score by Condition</div>", unsafe_allow_html=True)
+        stn_sc = sc_model[sc_model['From_Station'] == sel_stn].groupby('Remarks').agg(
+            avg_score=('crowd_score','mean'),
+            avg_pax  =('avg_passengers','mean')
+        ).reset_index()
+        color_cond = {
             'peak':'#e74c3c','off-peak':'#3498db','weekend':'#2ecc71',
             'festival':'#f39c12','maintenance':'#e67e22','Normal':'#9b59b6'
         }
-        fig_rem2 = px.bar(rem_fare, x='Remarks', y='Avg_Fare',
-                          color='Remarks', color_discrete_map=color_map_rem2,
-                          text='Avg_Fare', height=320,
-                          labels={'Remarks':'Condition','Avg_Fare':'Avg Fare (₹)'})
-        fig_rem2.update_traces(texttemplate='₹%{text:.0f}', textposition='outside',
+        fig_cond = px.bar(stn_sc, x='Remarks', y='avg_score',
+                          color='Remarks', color_discrete_map=color_cond,
+                          text='avg_score', height=320,
+                          labels={'Remarks':'Condition','avg_score':'Avg Crowd Score'})
+        fig_cond.update_traces(texttemplate='%{text:.0f}', textposition='outside',
                                textfont_color='white')
-        fig_rem2.update_layout(**PLOT_LAYOUT,
-                               xaxis=dict(**AXIS_STYLE),
-                               yaxis=dict(**AXIS_STYLE),
-                               showlegend=False,
-                               title=dict(text='Avg Fare by Trip Condition',
-                                          font=dict(color='white',size=13), x=0.5))
-        st.plotly_chart(fig_rem2, use_container_width=True)
+        fig_cond.update_layout(**PLOT_LAYOUT, xaxis=dict(**AXIS_STYLE),
+                               yaxis=dict(**AXIS_STYLE, range=[0,115]), showlegend=False)
+        st.plotly_chart(fig_cond, use_container_width=True)
 
-    with col_b:
-        rem_pax = (dff.groupby('Remarks')['Passengers']
-                      .mean().reset_index()
-                      .rename(columns={'Passengers':'Avg_Passengers'})
-                      .sort_values('Avg_Passengers', ascending=False))
-        fig_pax = px.bar(rem_pax, x='Remarks', y='Avg_Passengers',
-                         color='Remarks', color_discrete_map=color_map_rem2,
-                         text='Avg_Passengers', height=320,
-                         labels={'Remarks':'Condition','Avg_Passengers':'Avg Passengers'})
-        fig_pax.update_traces(texttemplate='%{text:.1f}', textposition='outside',
+    with col_r:
+        # Passengers by day of week
+        st.markdown("<div class='section-header'>📅 Avg Passengers by Day of Week</div>", unsafe_allow_html=True)
+        dow_pax = stn_df.groupby('DayOfWeek')['Passengers'].mean().reset_index()
+        dow_pax['DayOfWeek'] = pd.Categorical(dow_pax['DayOfWeek'],
+                                               categories=DOW_ORDER, ordered=True)
+        dow_pax = dow_pax.sort_values('DayOfWeek')
+        fig_dow = px.bar(dow_pax, x='DayOfWeek', y='Passengers',
+                         color='Passengers', color_continuous_scale='Purples',
+                         text='Passengers', height=320,
+                         labels={'DayOfWeek':'','Passengers':'Avg Passengers'})
+        fig_dow.update_traces(texttemplate='%{text:.1f}', textposition='outside',
                               textfont_color='white')
-        fig_pax.update_layout(**PLOT_LAYOUT,
-                              xaxis=dict(**AXIS_STYLE),
-                              yaxis=dict(**AXIS_STYLE),
-                              showlegend=False,
-                              title=dict(text='Avg Passengers by Condition',
-                                         font=dict(color='white',size=13), x=0.5))
-        st.plotly_chart(fig_pax, use_container_width=True)
-
-    # Ticket × Condition heatmap
-    st.markdown("<div class='section-header'>🔥 Ticket Type × Trip Condition (Revenue Heatmap)</div>", unsafe_allow_html=True)
-    tc_heat = (dff.groupby(['Ticket_Type','Remarks'])['Revenue']
-                  .sum().reset_index())
-    tc_pivot = tc_heat.pivot(index='Ticket_Type',
-                             columns='Remarks',
-                             values='Revenue').fillna(0)
-    fig_tch = px.imshow(tc_pivot, color_continuous_scale='Purples',
-                        aspect='auto', height=350,
-                        labels={'color':'Revenue (₹)'})
-    fig_tch.update_layout(**PLOT_LAYOUT,
-                          xaxis=dict(color='white', tickfont=dict(color='white')),
-                          yaxis=dict(color='white', tickfont=dict(color='white')),
-                          coloraxis_colorbar=dict(tickfont=dict(color='white'),
-                                                  titlefont=dict(color='white')))
-    st.plotly_chart(fig_tch, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════
-# PAGE 5 — TIME SERIES TRENDS
-# ══════════════════════════════════════════════════════════════
-elif page == "📅 Time Series Trends":
-
-    st.markdown("""
-    <div class='big-header'>
-    <h1>📅 Time Series Trends</h1>
-    <p>Year-over-year growth, monthly seasonality, and day-of-week patterns</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Daily trips trend
-    st.markdown("<div class='section-header'>📈 Daily Trips Volume (Full Timeline)</div>", unsafe_allow_html=True)
-    daily = (dff.groupby('Date').size().reset_index(name='Trips'))
-    fig_d = px.line(daily, x='Date', y='Trips',
-                    color_discrete_sequence=['#ab47bc'],
-                    labels={'Date':'','Trips':'Trips per Day'},
-                    height=300)
-    fig_d.update_traces(line_width=1.5)
-    fig_d.update_layout(**PLOT_LAYOUT,
-                        xaxis=dict(**AXIS_STYLE),
-                        yaxis=dict(**AXIS_STYLE))
-    st.plotly_chart(fig_d, use_container_width=True)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("<div class='section-header'>📆 Monthly Seasonality (Avg Trips)</div>", unsafe_allow_html=True)
-        month_order = ['Jan','Feb','Mar','Apr','May','Jun',
-                       'Jul','Aug','Sep','Oct','Nov','Dec']
-        mon_avg = (dff.groupby('Month_Name').size()
-                      .reset_index(name='Trips'))
-        mon_avg['Month_Name'] = pd.Categorical(mon_avg['Month_Name'],
-                                               categories=month_order, ordered=True)
-        mon_avg = mon_avg.sort_values('Month_Name')
-        fig_mon = px.bar(mon_avg, x='Month_Name', y='Trips',
-                         color='Trips', color_continuous_scale='Purples',
-                         text='Trips', height=340,
-                         labels={'Month_Name':'Month','Trips':'Total Trips'})
-        fig_mon.update_traces(texttemplate='%{text:,}', textposition='outside',
-                              textfont_color='white')
-        fig_mon.update_layout(**PLOT_LAYOUT,
-                              xaxis=dict(**AXIS_STYLE),
-                              yaxis=dict(**AXIS_STYLE),
-                              coloraxis_showscale=False)
-        st.plotly_chart(fig_mon, use_container_width=True)
-
-    with col2:
-        st.markdown("<div class='section-header'>📅 Day of Week Pattern</div>", unsafe_allow_html=True)
-        dow_order = ['Monday','Tuesday','Wednesday','Thursday',
-                     'Friday','Saturday','Sunday']
-        dow_df = (dff.groupby('DayOfWeek').size()
-                     .reset_index(name='Trips'))
-        dow_df['DayOfWeek'] = pd.Categorical(dow_df['DayOfWeek'],
-                                             categories=dow_order, ordered=True)
-        dow_df = dow_df.sort_values('DayOfWeek')
-        fig_dow = px.bar(dow_df, x='DayOfWeek', y='Trips',
-                         color='Trips', color_continuous_scale='Purples',
-                         text='Trips', height=340,
-                         labels={'DayOfWeek':'','Trips':'Total Trips'})
-        fig_dow.update_traces(texttemplate='%{text:,}', textposition='outside',
-                              textfont_color='white')
-        fig_dow.update_layout(**PLOT_LAYOUT,
-                              xaxis=dict(**AXIS_STYLE),
-                              yaxis=dict(**AXIS_STYLE),
-                              coloraxis_showscale=False)
+        fig_dow.update_layout(**PLOT_LAYOUT, xaxis=dict(**AXIS_STYLE),
+                               yaxis=dict(**AXIS_STYLE), coloraxis_showscale=False)
         st.plotly_chart(fig_dow, use_container_width=True)
 
-    # YoY comparison
-    st.markdown("<div class='section-header'>📊 Year-over-Year Monthly Comparison</div>", unsafe_allow_html=True)
-    yoy = (dff.groupby(['Year','Month','Month_Name']).size()
-              .reset_index(name='Trips'))
-    yoy['Month_Name'] = pd.Categorical(yoy['Month_Name'],
-                                       categories=month_order, ordered=True)
-    yoy = yoy.sort_values(['Year','Month_Name'])
-    fig_yoy = px.line(yoy, x='Month_Name', y='Trips',
-                      color='Year', markers=True,
+    # Crowd heatmap: DOW × Condition
+    st.markdown("<div class='section-header'>🔥 Crowd Score Heatmap — Day × Condition</div>", unsafe_allow_html=True)
+    stn_heat = sc_model[sc_model['From_Station'] == sel_stn].copy()
+    stn_heat['DayOfWeek'] = pd.Categorical(stn_heat['DayOfWeek'],
+                                            categories=DOW_ORDER, ordered=True)
+    heat_piv = stn_heat.pivot_table(index='Remarks', columns='DayOfWeek',
+                                     values='crowd_score', aggfunc='mean').fillna(0)
+
+    fig_heat = px.imshow(heat_piv, color_continuous_scale='RdYlGn_r',
+                         aspect='auto', height=300,
+                         labels={'color':'Crowd Score'},
+                         zmin=0, zmax=100,
+                         text_auto='.0f')
+    fig_heat.update_layout(**PLOT_LAYOUT,
+                            xaxis=dict(color='white', tickfont=dict(color='white')),
+                            yaxis=dict(color='white', tickfont=dict(color='white')),
+                            coloraxis_colorbar=dict(tickfont=dict(color='white'),
+                                                    titlefont=dict(color='white')))
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+    # Monthly trend
+    st.markdown("<div class='section-header'>📈 Monthly Passenger Trend</div>", unsafe_allow_html=True)
+    mon_t = stn_df.groupby(['Year','Month','Month_Name'])['Passengers'].mean().reset_index()
+    mon_t['YM'] = mon_t['Year'].astype(str) + '-' + mon_t['Month'].astype(str).str.zfill(2)
+    mon_t = mon_t.sort_values('YM')
+
+    fig_mon = px.line(mon_t, x='YM', y='Passengers',
+                      color='Year',
                       color_discrete_sequence=['#7b2fbe','#ab47bc','#ce93d8'],
-                      labels={'Month_Name':'Month','Trips':'Trips','Year':'Year'},
-                      height=380)
-    fig_yoy.update_layout(**PLOT_LAYOUT,
-                          xaxis=dict(**AXIS_STYLE),
-                          yaxis=dict(**AXIS_STYLE),
-                          legend=LEGEND_STYLE)
-    st.plotly_chart(fig_yoy, use_container_width=True)
+                      markers=True, height=320,
+                      labels={'YM':'Month','Passengers':'Avg Passengers/Trip'})
+    fig_mon.update_layout(**PLOT_LAYOUT,
+                           xaxis=dict(**AXIS_STYLE, title=''),
+                           yaxis=dict(**AXIS_STYLE), legend=LEGEND_STYLE)
+    st.plotly_chart(fig_mon, use_container_width=True)
 
-    # Quarterly revenue trend
-    st.markdown("<div class='section-header'>📊 Quarterly Revenue Trend</div>", unsafe_allow_html=True)
-    qrev = (dff.groupby('Quarter')['Revenue']
-               .sum().reset_index()
-               .rename(columns={'Revenue':'Total_Revenue'})
-               .sort_values('Quarter'))
-    fig_q = px.bar(qrev, x='Quarter', y='Total_Revenue',
-                   color='Total_Revenue', color_continuous_scale='Purples',
-                   text='Total_Revenue', height=340,
-                   labels={'Quarter':'Quarter','Total_Revenue':'Revenue (₹)'})
-    fig_q.update_traces(texttemplate='₹%{text:,.0f}', textposition='outside',
-                        textfont_color='white')
-    fig_q.update_layout(**PLOT_LAYOUT,
-                        xaxis=dict(**AXIS_STYLE),
-                        yaxis=dict(**AXIS_STYLE),
-                        coloraxis_showscale=False)
-    st.plotly_chart(fig_q, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════
-# PAGE 6 — INSIGHTS & RECOMMENDATIONS
+# PAGE 4 — WEEKLY & SEASONAL TRENDS
 # ══════════════════════════════════════════════════════════════
-elif page == "💡 Insights & Recommendations":
+elif page == "📅 Weekly & Seasonal Trends":
 
     st.markdown("""
     <div class='big-header'>
-    <h1>💡 Insights & Recommendations</h1>
-    <p>Data-driven findings for DMRC, transport planners, and policy makers</p>
+    <h1>📅 Weekly & Seasonal Crowd Trends</h1>
+    <p>System-wide crowd patterns by day of week, month, quarter, and condition</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Key stats
-    busiest  = dff['From_Station'].value_counts().idxmax()
-    top_route= dff['Route'].value_counts().idxmax()
-    top_ticket = dff['Ticket_Type'].value_counts().idxmax()
-    peak_rem = dff.groupby('Remarks')['Passengers'].mean().idxmax()
-    max_fare_tt = dff.groupby('Ticket_Type')['Fare'].mean().idxmax()
+    # DOW crowd scores across all stations
+    st.markdown("<div class='section-header'>📆 Average Crowd Score by Day of Week</div>", unsafe_allow_html=True)
+    dow_scores = sc_model.groupby('DayOfWeek')['crowd_score'].mean().reset_index()
+    dow_scores['DayOfWeek'] = pd.Categorical(dow_scores['DayOfWeek'],
+                                              categories=DOW_ORDER, ordered=True)
+    dow_scores = dow_scores.sort_values('DayOfWeek')
+
+    fig_dow_cs = px.bar(dow_scores, x='DayOfWeek', y='crowd_score',
+                        color='crowd_score',
+                        color_continuous_scale='RdYlGn_r',
+                        text='crowd_score', height=320,
+                        labels={'DayOfWeek':'','crowd_score':'Avg Crowd Score'},
+                        range_color=[0,100])
+    fig_dow_cs.update_traces(texttemplate='%{text:.0f}', textposition='outside',
+                              textfont_color='white')
+    fig_dow_cs.update_layout(**PLOT_LAYOUT, xaxis=dict(**AXIS_STYLE),
+                              yaxis=dict(**AXIS_STYLE, range=[0,115]),
+                              coloraxis_showscale=False)
+    st.plotly_chart(fig_dow_cs, use_container_width=True)
+
+    col_l, col_r = st.columns(2)
+
+    with col_l:
+        # Monthly avg passengers
+        st.markdown("<div class='section-header'>📅 Monthly Avg Passengers (System-Wide)</div>", unsafe_allow_html=True)
+        mon_sys = df.groupby('Month_Name')['Passengers'].mean().reset_index()
+        mon_sys['Month_Name'] = pd.Categorical(mon_sys['Month_Name'],
+                                                categories=MONTH_NAMES, ordered=True)
+        mon_sys = mon_sys.sort_values('Month_Name')
+        fig_mon_s = px.bar(mon_sys, x='Month_Name', y='Passengers',
+                           color='Passengers', color_continuous_scale='Purples',
+                           text='Passengers', height=320,
+                           labels={'Month_Name':'Month','Passengers':'Avg Passengers/Trip'})
+        fig_mon_s.update_traces(texttemplate='%{text:.1f}', textposition='outside',
+                                textfont_color='white')
+        fig_mon_s.update_layout(**PLOT_LAYOUT, xaxis=dict(**AXIS_STYLE),
+                                yaxis=dict(**AXIS_STYLE), coloraxis_showscale=False)
+        st.plotly_chart(fig_mon_s, use_container_width=True)
+
+    with col_r:
+        # Condition crowd score
+        st.markdown("<div class='section-header'>⚡ Crowd Score by Service Condition</div>", unsafe_allow_html=True)
+        cond_scores = sc_model.groupby('Remarks')['crowd_score'].mean().reset_index()
+        color_cond2 = {
+            'peak':'#e74c3c','off-peak':'#3498db','weekend':'#2ecc71',
+            'festival':'#f39c12','maintenance':'#e67e22'
+        }
+        fig_cs_cond = px.bar(cond_scores, x='Remarks', y='crowd_score',
+                             color='Remarks', color_discrete_map=color_cond2,
+                             text='crowd_score', height=320,
+                             labels={'Remarks':'Condition','crowd_score':'Avg Crowd Score'})
+        fig_cs_cond.update_traces(texttemplate='%{text:.0f}', textposition='outside',
+                                  textfont_color='white')
+        fig_cs_cond.update_layout(**PLOT_LAYOUT, xaxis=dict(**AXIS_STYLE),
+                                   yaxis=dict(**AXIS_STYLE, range=[0,115]),
+                                   showlegend=False)
+        st.plotly_chart(fig_cs_cond, use_container_width=True)
+
+    # Full heatmap: all stations × DOW × average crowd score
+    st.markdown("<div class='section-header'>🔥 System-Wide Crowd Heatmap (Station × Day)</div>", unsafe_allow_html=True)
+    sys_heat = sc_model.groupby(['From_Station','DayOfWeek'])['crowd_score'].mean().reset_index()
+    sys_heat['DayOfWeek'] = pd.Categorical(sys_heat['DayOfWeek'],
+                                            categories=DOW_ORDER, ordered=True)
+    sys_pivot = sys_heat.pivot(index='From_Station', columns='DayOfWeek',
+                                values='crowd_score').fillna(0)
+    # Sort by mean crowd score
+    sys_pivot = sys_pivot.loc[sys_pivot.mean(axis=1).sort_values(ascending=False).index]
+
+    fig_sys_heat = px.imshow(sys_pivot,
+                             color_continuous_scale='RdYlGn_r',
+                             aspect='auto', height=500,
+                             labels={'color':'Crowd Score'},
+                             zmin=0, zmax=100,
+                             text_auto='.0f')
+    fig_sys_heat.update_layout(**PLOT_LAYOUT,
+                                xaxis=dict(color='white', tickfont=dict(color='white')),
+                                yaxis=dict(color='white', tickfont=dict(color='white')),
+                                coloraxis_colorbar=dict(tickfont=dict(color='white'),
+                                                        titlefont=dict(color='white')))
+    st.plotly_chart(fig_sys_heat, use_container_width=True)
+
+    # YoY passenger trend
+    st.markdown("<div class='section-header'>📈 Year-over-Year Passenger Load</div>", unsafe_allow_html=True)
+    yoy = df.groupby(['Year','Month','Month_Name'])['Passengers'].mean().reset_index()
+    yoy['Month_Name'] = pd.Categorical(yoy['Month_Name'],
+                                        categories=MONTH_NAMES, ordered=True)
+    yoy = yoy.sort_values(['Year','Month_Name'])
+    fig_yoy = px.line(yoy, x='Month_Name', y='Passengers',
+                      color='Year', markers=True,
+                      color_discrete_sequence=['#7b2fbe','#ab47bc','#ce93d8'],
+                      labels={'Month_Name':'Month','Passengers':'Avg Passengers/Trip','Year':'Year'},
+                      height=340)
+    fig_yoy.update_layout(**PLOT_LAYOUT, xaxis=dict(**AXIS_STYLE),
+                           yaxis=dict(**AXIS_STYLE), legend=LEGEND_STYLE)
+    st.plotly_chart(fig_yoy, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════
+# PAGE 5 — CROWD RISK RANKING
+# ══════════════════════════════════════════════════════════════
+elif page == "🏆 Crowd Risk Ranking":
+
+    st.markdown("""
+    <div class='big-header'>
+    <h1>🏆 Crowd Risk Station Ranking</h1>
+    <p>Stations ranked by average crowd score — identify where overcrowding risk is highest</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Average crowd score per station across all conditions
+    risk = sc_model.groupby('From_Station').agg(
+        avg_crowd_score  =('crowd_score','mean'),
+        max_crowd_score  =('crowd_score','max'),
+        avg_passengers   =('avg_passengers','mean'),
+        high_risk_periods=('crowd_score', lambda x: (x >= 65).sum()),
+    ).reset_index().sort_values('avg_crowd_score', ascending=False)
+
+    risk['Rank'] = range(1, len(risk)+1)
+    risk['Risk_Level'] = risk['avg_crowd_score'].apply(
+        lambda s: '🔴 High' if s>=65 else ('🟡 Medium' if s>=35 else '🟢 Low')
+    )
+
+    # KPIs
+    k1,k2,k3 = st.columns(3)
+    high_risk_stn = (risk['avg_crowd_score']>=65).sum()
+    med_risk_stn  = ((risk['avg_crowd_score']>=35) & (risk['avg_crowd_score']<65)).sum()
+    low_risk_stn  = (risk['avg_crowd_score']<35).sum()
+
+    for col, val, lbl in [
+        (k1, f"{high_risk_stn}", "🔴 High Risk Stations"),
+        (k2, f"{med_risk_stn}",  "🟡 Medium Risk Stations"),
+        (k3, f"{low_risk_stn}",  "🟢 Low Risk Stations"),
+    ]:
+        with col:
+            st.markdown(f"""
+            <div class='kpi-card'>
+            <div class='kpi-value'>{val}</div>
+            <div class='kpi-label'>{lbl}</div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Ranked bar chart
+    st.markdown("<div class='section-header'>📊 Station Crowd Risk Ranking (All Conditions Average)</div>", unsafe_allow_html=True)
+
+    def risk_color(score):
+        if score >= 65: return '#e74c3c'
+        elif score >= 35: return '#f39c12'
+        return '#2ecc71'
+
+    risk['bar_color'] = risk['avg_crowd_score'].apply(risk_color)
+
+    fig_rank = go.Figure(go.Bar(
+        y=risk['From_Station'],
+        x=risk['avg_crowd_score'],
+        orientation='h',
+        marker_color=risk['bar_color'],
+        text=[f"{rc} {s:.0f}" for rc, s in zip(risk['Risk_Level'], risk['avg_crowd_score'])],
+        textposition='outside',
+        textfont=dict(color='white', size=11),
+    ))
+    fig_rank.update_layout(
+        **PLOT_LAYOUT, height=600,
+        xaxis=dict(**AXIS_STYLE, title='Avg Crowd Score (0–100)', range=[0,115]),
+        yaxis=dict(**AXIS_STYLE, title='', autorange='reversed'),
+        title=dict(text='Station Crowd Risk Ranking (Higher = More Crowded)',
+                   font=dict(color='white', size=14), x=0.5),
+    )
+    st.plotly_chart(fig_rank, use_container_width=True)
+
+    # Ranked table
+    st.markdown("<div class='section-header'>📋 Full Risk Table</div>", unsafe_allow_html=True)
+    display_risk = risk[['Rank','From_Station','avg_crowd_score',
+                          'max_crowd_score','avg_passengers',
+                          'high_risk_periods','Risk_Level']].copy()
+    display_risk.columns = ['Rank','Station','Avg Score','Peak Score',
+                             'Avg Passengers','High-Risk Slots','Risk Level']
+
+    st.dataframe(
+        display_risk.style.format({
+            'Avg Score': '{:.1f}', 'Peak Score': '{:.1f}',
+            'Avg Passengers': '{:.1f}', 'High-Risk Slots': '{:.0f}'
+        }),
+        use_container_width=True, height=500
+    )
+
+    # Recommendations
+    top5_high = risk.head(5)['From_Station'].tolist()
+    top5_low  = risk.tail(5)['From_Station'].tolist()
 
     st.markdown(f"""
     <div style='background:#0a2e0a; border:2px solid #2ecc71;
-    border-radius:12px; padding:1.5rem; margin:1rem 0;'>
-    <div style='color:#2ecc71; font-size:1.2rem;
-    font-weight:800; margin-bottom:0.8rem;'>
-    🎯 Key Findings from Delhi Metro Data (2022–2024)</div>
-    <div style='color:white; font-size:1rem; line-height:2;'>
-    🚉 <b style='color:#2ecc71;'>Busiest Origin:</b> {busiest} — highest departure volume<br>
-    🛤️ <b style='color:#2ecc71;'>Most Popular Route:</b> {top_route}<br>
-    🎫 <b style='color:#2ecc71;'>Dominant Ticket Type:</b> {top_ticket} — accounts for largest share of trips<br>
-    ⚡ <b style='color:#2ecc71;'>Highest Load Condition:</b> {peak_rem.title()} hours drive maximum passenger density<br>
-    💰 <b style='color:#2ecc71;'>Highest Avg Fare:</b> {max_fare_tt} ticket type commands the highest average fare
+    border-radius:12px; padding:1.5rem; margin-top:1rem;'>
+    <div style='color:#2ecc71; font-size:1.1rem; font-weight:800;
+    margin-bottom:0.8rem;'>💡 Crowd Management Recommendations</div>
+    <div style='color:white; line-height:1.9; font-size:0.95rem;'>
+    🔴 <b style='color:#e74c3c;'>Highest-Risk Stations</b> — {', '.join(top5_high)}<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;→ Deploy additional platform staff during peak & festival conditions.<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;→ Enable real-time crowd announcements and dynamic platform routing.<br><br>
+    🟢 <b style='color:#2ecc71;'>Lowest-Risk Stations</b> — {', '.join(top5_low)}<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;→ These stations can absorb overflow passengers from high-risk hubs.<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;→ Promote interchange routing via these stations during peak hours.
     </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("""
-        <div style='background:#1b0036; border:1px solid #7b2fbe;
-        border-radius:12px; padding:1.5rem;'>
-        <div style='color:#ce93d8; font-size:1.1rem;
-        font-weight:800; margin-bottom:1rem;'>
-        🏢 For DMRC Operations</div>
-
-        <div style='color:white; margin-bottom:1rem;'>
-        <b style='color:#f39c12;'>1. Capacity Management at Peak Stations</b><br>
-        <span style='color:#e0e0e0;'>Rajiv Chowk and New Delhi consistently show
-        highest origination volumes. Deploy additional staff and
-        cross-platform guidance during morning/evening peaks.</span>
-        </div>
-
-        <div style='color:white; margin-bottom:1rem;'>
-        <b style='color:#f39c12;'>2. Dynamic Fare Strategy</b><br>
-        <span style='color:#e0e0e0;'>Festival and peak conditions show
-        different passenger load patterns. Introduce time-of-day
-        dynamic pricing for Smart Card users to balance demand.</span>
-        </div>
-
-        <div style='color:white; margin-bottom:1rem;'>
-        <b style='color:#f39c12;'>3. Maintenance Scheduling</b><br>
-        <span style='color:#e0e0e0;'>Maintenance trips cluster on specific
-        day-station combinations. Schedule planned maintenance
-        during lowest-traffic windows (identified via heatmap).</span>
-        </div>
-
-        <div style='color:white;'>
-        <b style='color:#f39c12;'>4. Tourist Card Monetisation</b><br>
-        <span style='color:#e0e0e0;'>Tourist Card shows competitive avg fare.
-        Bundle tourist packages including airport routes and heritage
-        corridor stations to increase Tourist Card adoption.</span>
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("""
-        <div style='background:#1b0036; border:1px solid #7b2fbe;
-        border-radius:12px; padding:1.5rem;'>
-        <div style='color:#ce93d8; font-size:1.1rem;
-        font-weight:800; margin-bottom:1rem;'>
-        📊 For Policy & Urban Planning</div>
-
-        <div style='color:white; margin-bottom:1rem;'>
-        <b style='color:#f39c12;'>1. Weekend Ridership Growth</b><br>
-        <span style='color:#e0e0e0;'>Weekend trips show competitive volumes.
-        Introduce discounted weekend Smart Card passes to
-        shift commuters from personal vehicles.</span>
-        </div>
-
-        <div style='color:white; margin-bottom:1rem;'>
-        <b style='color:#f39c12;'>2. Short-Trip Optimisation</b><br>
-        <span style='color:#e0e0e0;'>0-3km trips generate high
-        cost-per-passenger. Encourage feeder bus integration
-        to reduce short metro hops and improve revenue per km.</span>
-        </div>
-
-        <div style='color:white; margin-bottom:1rem;'>
-        <b style='color:#f39c12;'>3. Revenue Corridor Expansion</b><br>
-        <span style='color:#e0e0e0;'>Central Delhi stations (Rajiv Chowk,
-        Kashmere Gate, Mandi House) generate the highest revenue.
-        Prioritise interchange improvements on these hubs.</span>
-        </div>
-
-        <div style='color:white;'>
-        <b style='color:#f39c12;'>4. Yearly Growth Acceleration</b><br>
-        <span style='color:#e0e0e0;'>Year-on-year data reveals
-        quarter-level growth patterns. Use Q4 festival season
-        surge data to plan service frequency increases proactively.</span>
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<div class='section-header'>📋 Data Quality Summary</div>", unsafe_allow_html=True)
-    dq = pd.DataFrame({
-        'Column'       : df.columns.tolist(),
-        'Total_Records': len(df),
-        'Missing'      : df.isnull().sum().values,
-        'Missing_%'    : (df.isnull().mean() * 100).round(2).values,
-        'Unique_Values': df.nunique().values,
-    })
-    st.dataframe(dq.style.format({
-        'Missing_%'    : '{:.2f}%',
-        'Total_Records': '{:,}',
-        'Missing'      : '{:,}'
-    }), use_container_width=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("""
-    <div style='text-align:center; color:#ab47bc;
-    font-size:0.85rem; padding:1rem;
-    border-top:1px solid #7b2fbe;'>
-    MBA Applied Business Analytics Project<br>
-    Dataset: Delhi Metro Ridership (2022–2024) · 150,000 Trips<br>
-    Dashboard built with Streamlit + Plotly
+    <div style='text-align:center; color:#ab47bc; font-size:0.82rem;
+    padding:1rem; border-top:1px solid #7b2fbe; margin-top:1.5rem;'>
+    MBA Applied Business Analytics · Delhi Metro Crowd Prediction System<br>
+    Model trained on 150,000 trips (2022–2024) · Built with Streamlit + Plotly
     </div>
     """, unsafe_allow_html=True)
