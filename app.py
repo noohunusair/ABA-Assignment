@@ -450,13 +450,10 @@ if page == "🔮 Predict Crowd":
 
     # Table view
     display_cols = ['Date','Condition','Passengers','Crowd_Score','Crowd_Level']
-    st.dataframe(
-        fdf[display_cols].style
-            .applymap(lambda v: f'color: {color_map.get(v, "white")}')
-                      subset=['Crowd_Level'])
-            .format({'Passengers':'{:.0f}','Crowd_Score':'{:.1f}'}),
-        use_container_width=True, height=290
-    )
+    fdf_display = fdf[display_cols].copy()
+    fdf_display['Passengers']  = fdf_display['Passengers'].apply(lambda x: f'{x:.0f}')
+    fdf_display['Crowd_Score'] = fdf_display['Crowd_Score'].apply(lambda x: f'{x:.1f}')
+    st.dataframe(fdf_display, use_container_width=True, height=290)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -913,13 +910,11 @@ elif page == "🏆 Crowd Risk Ranking":
     display_risk.columns = ['Rank','Station','Avg Score','Peak Score',
                              'Avg Passengers','High-Risk Slots','Risk Level']
 
-    st.dataframe(
-        display_risk.style.format({
-            'Avg Score': '{:.1f}', 'Peak Score': '{:.1f}',
-            'Avg Passengers': '{:.1f}', 'High-Risk Slots': '{:.0f}'
-        }),
-        use_container_width=True, height=500
-    )
+    for col, fmt in [('Avg Score','{:.1f}'),('Peak Score','{:.1f}'),
+                       ('Avg Passengers','{:.1f}'),('High-Risk Slots','{:.0f}')]:
+        display_risk[col] = pd.to_numeric(display_risk[col], errors='coerce').apply(
+            lambda x: fmt.format(x) if pd.notna(x) else '')
+    st.dataframe(display_risk, use_container_width=True, height=500)
 
     # Recommendations
     top5_high = risk.head(5)['From_Station'].tolist()
