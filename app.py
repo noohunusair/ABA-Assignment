@@ -452,7 +452,7 @@ if page == "🔮 Predict Crowd":
     display_cols = ['Date','Condition','Passengers','Crowd_Score','Crowd_Level']
     st.dataframe(
         fdf[display_cols].style
-            .applymap(lambda v: f'color: {color_map.get(v,"white")}',
+            .applymap(lambda v: f'color: {color_map.get(v, "white")}')
                       subset=['Crowd_Level'])
             .format({'Passengers':'{:.0f}','Crowd_Score':'{:.1f}'}),
         use_container_width=True, height=290
