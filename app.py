@@ -400,15 +400,11 @@ elif page == "🚉 Station Intelligence":
                        color_continuous_scale='Purples',
                        aspect='auto', height=420,
                        labels={'color':'Trips'})
-    fig_hm.update_layout(
-    **PLOT_LAYOUT,
-    xaxis=dict(color='white', tickfont=dict(color='white')),
-    yaxis=dict(color='white', tickfont=dict(color='white')),
-    coloraxis_colorbar=dict(
-        tickfont=dict(color='white'),
-        title=dict(font=dict(color='white'))   # ✅ FIXED
-    )
-)
+    fig_hm.update_layout(**PLOT_LAYOUT,
+                          xaxis=dict(color='white', tickfont=dict(color='white')),
+                          yaxis=dict(color='white', tickfont=dict(color='white')),
+                          coloraxis_colorbar=dict(tickfont=dict(color='white'),
+                                                  titlefont=dict(color='white')))
     st.plotly_chart(fig_hm, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════
@@ -435,16 +431,12 @@ elif page == "🗺️  Route & Distance Analysis":
                      color='Trips', color_continuous_scale='Purples',
                      text='Trips', height=600,
                      labels={'Route':'','Trips':'Trips'})
-        fig.update_traces(
-    texttemplate='%{text:,}',
-    textposition='outside',
-    textfont_color='white')
-
-        fig.update_layout(
-    **PLOT_LAYOUT,
-    xaxis={**AXIS_STYLE, "tickfont": dict(size=10, color='white')},
-    yaxis={**AXIS_STYLE, "tickfont": dict(size=10, color='white')},
-    coloraxis_showscale=False)
+        fig.update_traces(texttemplate='%{text:,}', textposition='outside',
+                          textfont_color='white')
+        fig.update_layout(**PLOT_LAYOUT,
+                          xaxis=dict(**AXIS_STYLE),
+                          yaxis=dict(**AXIS_STYLE, tickfont=dict(size=10, color='white')),
+                          coloraxis_showscale=False)
         st.plotly_chart(fig, use_container_width=True)
 
     with col_r:
